@@ -1,4 +1,6 @@
-export function NextStepCard({ step, detail }: { step: string; detail: string }) {
+import type { ReactNode } from 'react'
+
+export function NextStepCard({ step, detail, action }: { step: string; detail: string; action?: ReactNode }) {
   return (
     <section
       aria-labelledby="next-step-label"
@@ -16,6 +18,7 @@ export function NextStepCard({ step, detail }: { step: string; detail: string })
           <InlineCode text={detail} />
         </p>
       )}
+      {action && <div className="mt-6">{action}</div>}
     </section>
   )
 }

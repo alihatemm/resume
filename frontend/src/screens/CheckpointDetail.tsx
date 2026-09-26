@@ -6,9 +6,9 @@ import { Section } from '../components/Section'
 import { ErrorState, LoadingState } from '../components/States'
 import { SinceYouLeft } from '../components/SinceYouLeft'
 import { StatusBadge } from '../components/StatusBadge'
-import { fullDateTime, linkLabel, relativeTime, shortSha } from '../format'
+import { fullDateTime, linkLabel, relativeTime, shortSha, vscodeFileUri } from '../format'
 import { href, paths } from '../router'
-import type { Checkpoint, GitContext, Summary } from '../types'
+import type { Checkpoint, FileRef, GitContext, Summary } from '../types'
 import { useAsync } from '../useAsync'
 
 export function CheckpointDetail({ id }: { id: number }) {
@@ -50,6 +50,7 @@ export function CheckpointDetail({ id }: { id: number }) {
 function Restore({ checkpoint: c }: { checkpoint: Checkpoint }) {
   const aiFailed = c.status === 'ai_failed'
   const title = c.summary?.title || c.note.split('\n')[0].slice(0, 80) || 'Untitled checkpoint'
+  const resumeTarget = c.summary ? findResumeTarget(c.summary.files) : null
 
   return (
     <article>
@@ -78,7 +79,11 @@ function Restore({ checkpoint: c }: { checkpoint: Checkpoint }) {
           {c.summary ? (
             <>
               {aiFailed && <FallbackWarning />}
-              <NextStepCard step={c.summary.next_step} detail={c.summary.next_step_detail} />
+              <NextStepCard
+                step={c.summary.next_step}
+                detail={c.summary.next_step_detail}
+                action={resumeTarget && <ResumeWorkAction target={resumeTarget} />}
+              />
             </>
           ) : (
             <NoSummaryNotice />
@@ -106,6 +111,30 @@ function Restore({ checkpoint: c }: { checkpoint: Checkpoint }) {
         <GitDetails git={c.git} defaultOpen={!c.summary} />
       </div>
     </article>
+  )
+}
+
+// One-click jump to the most relevant file: the first one (files are most-important-first)
+// with a usable backend-verified abs_path. Null when nothing can be opened, so the card shows
+// no action at all rather than a dead or disabled button.
+function findResumeTarget(files: FileRef[]): (FileRef & { abs_path: string }) | null {
+  const target = files.find((f) => f.abs_path !== null && f.abs_path.trim() !== '')
+  return target?.abs_path ? { ...target, abs_path: target.abs_path } : null
+}
+
+// Opens the target's line when known, else just the file (vscodeFileUri handles both).
+function ResumeWorkAction({ target }: { target: FileRef & { abs_path: string } }) {
+  const location = `${target.path}${target.line !== null ? `:${target.line}` : ''}`
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <LinkButton href={vscodeFileUri(target.abs_path, target.line)} title={`Open in VS Code: ${location}`}>
+        Resume work ↗
+      </LinkButton>
+      <span className="min-w-0 truncate font-mono text-xs text-zinc-400" title={location}>
+        {location}
+      </span>
+    </div>
   )
 }
 
