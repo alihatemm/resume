@@ -3,7 +3,7 @@
 > **Your computer remembers your files. Resume remembers your train of thought.**
 > *Pick up exactly where you left off.*
 
-Everything here describes what works on `main` today (tag `feature-complete-v1`).
+Everything here describes the verified application at `feature-complete-v1`; the complete submission-ready repository is tagged `submission-ready-v2`.
 
 ---
 
@@ -159,7 +159,7 @@ beyond code.
 
 **Code and repo**
 
-- [ ] `main` contains everything being demoed (`feature-complete-v1`).
+- [ ] `main` contains everything being demoed (`submission-ready-v2`).
 - [ ] `(cd backend && .venv/bin/pytest)` passes.
 - [ ] `(cd frontend && npm run build && npm run lint)` passes.
 - [ ] `.env` is not committed (`git check-ignore .env` prints `.env`), and no keys appear in the repo or slides.
