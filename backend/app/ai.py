@@ -25,6 +25,9 @@ log = logging.getLogger("resume.ai")
 
 # Latency budget: the whole AI step (primary + optional fallback) must finish within this.
 AI_DEADLINE_SECONDS = 15.0
+# When a fallback is configured, the primary gets at most this much of the budget, so a slow
+# failure (e.g. a 503 that arrives after 10s) can't starve the fallback.
+PRIMARY_ATTEMPT_SECONDS = 8.0
 # Only try the fallback model if at least this much of the budget is left.
 FALLBACK_MIN_REMAINING_SECONDS = 6.0
 
@@ -91,28 +94,35 @@ def _response_model(paths: list[str]) -> type[AISummary]:
 
 
 def _generate_with_deadline(prompt: str, schema: type[AISummary]) -> str:
-    """Primary model once; fallback model at most once, only for 429/5xx; hard total deadline."""
+    """Primary model once; fallback at most once, only for 429/5xx or a capped-out primary; hard total deadline."""
     deadline = time.monotonic() + AI_DEADLINE_SECONDS
     models = [config.GEMINI_MODEL]
     if config.GEMINI_FALLBACK_MODEL and config.GEMINI_FALLBACK_MODEL != config.GEMINI_MODEL:
         models.append(config.GEMINI_FALLBACK_MODEL)
 
     for i, model in enumerate(models):
+        is_last = i == len(models) - 1
+        remaining = deadline - time.monotonic()
+        # Only a model with a fallback behind it is capped; the last model gets whatever is left.
+        attempt_timeout = remaining if is_last else min(PRIMARY_ATTEMPT_SECONDS, remaining)
         future = _executor.submit(_call_gemini, prompt, schema, model)
         try:
-            text = future.result(timeout=max(deadline - time.monotonic(), 0.1))
+            text = future.result(timeout=max(attempt_timeout, 0.1))
             log.info("Gemini %s responded.", model)
             return text
         except FutureTimeout:
-            raise TimeoutError(f"{model}: no response within the {AI_DEADLINE_SECONDS:.0f}s budget")
+            error: Exception = TimeoutError(f"{model}: no response within {attempt_timeout:.1f}s")
+            eligible = not is_last  # a capped-out primary is an availability failure
+            reason = f"timed out after {attempt_timeout:.1f}s"
         except Exception as e:
-            remaining = deadline - time.monotonic()
-            is_last = i == len(models) - 1
-            if is_last or not _is_retriable(e) or remaining < FALLBACK_MIN_REMAINING_SECONDS:
-                if not is_last:
-                    log.info("Gemini %s failed (%s); no fallback attempted.", model, _describe(e))
-                raise
-            log.info("Gemini %s failed (%s); trying fallback %s with %.1fs left.", model, _describe(e), models[i + 1], remaining)
+            error, eligible, reason = e, _is_retriable(e), _describe(e)
+
+        remaining = deadline - time.monotonic()
+        if is_last or not eligible or remaining < FALLBACK_MIN_REMAINING_SECONDS:
+            if not is_last:
+                log.info("Gemini %s failed (%s); no fallback attempted.", model, reason)
+            raise error
+        log.info("Gemini %s failed (%s); trying fallback %s with %.1fs left.", model, reason, models[i + 1], remaining)
     raise RuntimeError("unreachable")
 
 

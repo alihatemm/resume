@@ -1,0 +1,12 @@
+$ pytest
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+_________________________ test_me_returns_current_user _________________________
+tests/test_me.py:14: in test_me_returns_current_user
+    assert response.status_code == 200, response.json()
+E   AssertionError: {'detail': 'Missing Authorization header'}
+E   assert 401 == 200
+E    +  where 401 = <Response [401 Unauthorized]>.status_code
+=========================== short test summary info ============================
+FAILED tests/test_me.py::test_me_returns_current_user - AssertionError: {'det...
+1 failed, 1 passed in 0.16s

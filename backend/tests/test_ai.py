@@ -375,3 +375,98 @@ def test_system_instruction_declares_tags_as_resume_only():
     text = ai.prompts.SYSTEM_INSTRUCTION
     assert "supplied only by Resume" in text
     assert "literal captured data" in text
+
+
+# ---------- primary attempt cap (slow 503 must not starve the fallback) ----------
+
+def test_production_budget_always_leaves_room_for_fallback():
+    assert ai.AI_DEADLINE_SECONDS - ai.PRIMARY_ATTEMPT_SECONDS >= ai.FALLBACK_MIN_REMAINING_SECONDS
+
+
+def _scaled_budget(monkeypatch):
+    # Same shape as production (15s / 8s / 6s), scaled down so tests stay fast.
+    monkeypatch.setattr(ai, "AI_DEADLINE_SECONDS", 1.5)
+    monkeypatch.setattr(ai, "PRIMARY_ATTEMPT_SECONDS", 0.8)
+    monkeypatch.setattr(ai, "FALLBACK_MIN_REMAINING_SECONDS", 0.6)
+
+
+def test_slow_primary_503_is_capped_and_fallback_runs(ctx, fake_gemini, monkeypatch, caplog):
+    _scaled_budget(monkeypatch)
+    caplog.set_level("INFO", logger="resume.ai")
+    calls = []
+
+    def slow_503_then_fallback_ok(prompt, schema, model):
+        calls.append(model)
+        if model == "primary-model":
+            time.sleep(1.1)  # like the live run: the 503 arrives after most of the budget
+            raise UNAVAILABLE
+        return good_output()
+
+    monkeypatch.setattr(ai, "_call_gemini", slow_503_then_fallback_ok)
+    started = time.monotonic()
+    summary, status = ai.summarize(*ctx)
+    elapsed = time.monotonic() - started
+
+    assert status == "ready"
+    assert summary.title == "Missing auth header in /me"
+    assert calls == ["primary-model", "fallback-model"]
+    assert elapsed < 1.5
+    assert "primary-model failed (timed out after 0.8s); trying fallback fallback-model" in caplog.text
+
+
+def test_slow_primary_and_slow_fallback_stay_within_deadline(ctx, fake_gemini, monkeypatch):
+    _scaled_budget(monkeypatch)
+    calls = []
+
+    def always_slow(prompt, schema, model):
+        calls.append(model)
+        time.sleep(3)
+        return good_output()
+
+    monkeypatch.setattr(ai, "_call_gemini", always_slow)
+    started = time.monotonic()
+    summary, status = ai.summarize(*ctx)
+    assert status == "ai_failed"
+    assert summary.next_step == "Check middleware next."  # placeholder
+    assert calls == ["primary-model", "fallback-model"]
+    assert time.monotonic() - started < 1.8
+
+
+def test_primary_is_not_capped_without_a_fallback(ctx, fake_gemini, monkeypatch):
+    _scaled_budget(monkeypatch)
+    monkeypatch.setattr(config, "GEMINI_FALLBACK_MODEL", "")
+
+    def slower_than_cap(prompt, schema, model):
+        time.sleep(1.0)  # over the 0.8s cap, under the 1.5s deadline
+        return good_output()
+
+    monkeypatch.setattr(ai, "_call_gemini", slower_than_cap)
+    _, status = ai.summarize(*ctx)
+    assert status == "ready"
+
+
+def test_fast_primary_503_still_uses_fallback_with_cap(ctx, fake_gemini, monkeypatch):
+    _scaled_budget(monkeypatch)
+    fake_gemini.error = [UNAVAILABLE, good_output()]
+    _, status = ai.summarize(*ctx)
+    assert status == "ready"
+    assert fake_gemini.models() == ["primary-model", "fallback-model"]
+
+
+@pytest.mark.parametrize("error", [
+    errors.ClientError(400, {"error": {"code": 400, "message": "bad", "status": "INVALID_ARGUMENT"}}),
+    errors.ClientError(403, {"error": {"code": 403, "message": "denied", "status": "PERMISSION_DENIED"}}),
+])
+def test_slow_non_retriable_primary_error_still_no_fallback(ctx, fake_gemini, monkeypatch, error):
+    _scaled_budget(monkeypatch)
+    calls = []
+
+    def slow_client_error(prompt, schema, model):
+        calls.append(model)
+        time.sleep(0.3)  # under the cap, so the error itself (not the cap) decides
+        raise error
+
+    monkeypatch.setattr(ai, "_call_gemini", slow_client_error)
+    _, status = ai.summarize(*ctx)
+    assert status == "ai_failed"
+    assert calls == ["primary-model"]
