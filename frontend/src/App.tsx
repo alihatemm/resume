@@ -1,46 +1,45 @@
-import { useEffect, useState } from 'react'
-import { api } from './api'
-import type { Health } from './types'
+import { useEffect } from 'react'
+import { LinkButton } from './components/Button'
+import { Layout } from './components/Layout'
+import { ErrorState } from './components/States'
+import { href, navigate, paths, useRoute } from './router'
+import { CheckpointDetail } from './screens/CheckpointDetail'
+import { Dashboard } from './screens/Dashboard'
+import { NewCheckpoint } from './screens/NewCheckpoint'
 
-// M0 placeholder: proves frontend → backend → config wiring. Replaced in M1.
 function App() {
-  const [health, setHealth] = useState<Health | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const route = useRoute()
 
+  // "N" opens the new-checkpoint form from anywhere except while typing.
   useEffect(() => {
-    api.health().then(setHealth).catch((e: Error) => setError(e.message))
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'n' || e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target
+      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"]')) return
+      e.preventDefault()
+      navigate(paths.new)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-6 px-6">
-      <div>
-        <h1 className="text-4xl font-semibold tracking-tight">Resume</h1>
-        <p className="mt-1 text-zinc-400">Pick up exactly where you left off.</p>
-      </div>
-
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 font-mono text-sm">
-        {error && <p className="text-red-400">Backend unreachable: {error}</p>}
-        {!error && !health && <p className="text-zinc-500">Checking backend…</p>}
-        {health && (
-          <ul className="space-y-1">
-            <li>
-              backend: <span className="text-emerald-400">{health.status}</span>
-            </li>
-            <li>
-              gemini key:{' '}
-              {health.gemini_configured ? (
-                <span className="text-emerald-400">configured</span>
-              ) : (
-                <span className="text-amber-400">missing</span>
-              )}
-            </li>
-            <li>
-              model: <span className="text-zinc-300">{health.model}</span>
-            </li>
-          </ul>
-        )}
-      </div>
-    </main>
+    <Layout route={route}>
+      {route.name === 'dashboard' && <Dashboard />}
+      {route.name === 'new' && <NewCheckpoint />}
+      {route.name === 'detail' && <CheckpointDetail key={route.id} id={route.id} />}
+      {route.name === 'not_found' && (
+        <ErrorState
+          title="Page not found"
+          message={window.location.hash}
+          action={
+            <LinkButton variant="ghost" href={href(paths.dashboard)}>
+              Back to checkpoints
+            </LinkButton>
+          }
+        />
+      )}
+    </Layout>
   )
 }
 
