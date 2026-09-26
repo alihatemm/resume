@@ -104,3 +104,32 @@ class CheckpointListItem(BaseModel):
     status: Literal["ready", "ai_failed"]
     title: str
     next_step: str
+
+
+# ---------- Since you left (computed on request, never stored) ----------
+
+class SinceCommit(BaseModel):
+    sha: str  # short
+    subject: str
+    author: str
+    date: str  # ISO 8601 author date
+
+
+class SinceYouLeft(BaseModel):
+    status: Literal["changed", "unchanged", "unavailable"]
+    reason: Optional[Literal["repo_missing", "not_a_repo", "commit_missing", "git_error"]] = None
+    message: str  # human-readable summary, safe to show as-is
+    history: Literal["linear", "behind", "diverged"] = "linear"
+    saved_head: str
+    current_head: Optional[str] = None
+    saved_branch: str
+    current_branch: Optional[str] = None
+    commits_ahead: int = 0  # commits in current HEAD that were not in the saved commit
+    commits_behind: int = 0  # commits in the saved commit that current HEAD no longer has
+    commits: list[SinceCommit] = []  # newest first, bounded
+    commits_truncated: bool = False
+    files_changed: int = 0  # total files changed between saved commit and current HEAD
+    files: list[ChangedFile] = []  # bounded
+    files_truncated: bool = False
+    uncommitted_files: int = 0
+    uncommitted_paths: list[str] = []  # bounded

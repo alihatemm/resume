@@ -77,3 +77,31 @@ export interface Health {
   gemini_configured: boolean
   model: string
 }
+
+// Since you left: computed on request by GET /api/checkpoints/{id}/since, never stored.
+export interface SinceCommit {
+  sha: string // short
+  subject: string
+  author: string
+  date: string // ISO 8601 author date
+}
+
+export interface SinceYouLeft {
+  status: 'changed' | 'unchanged' | 'unavailable'
+  reason: 'repo_missing' | 'not_a_repo' | 'commit_missing' | 'git_error' | null
+  message: string // human-readable summary, safe to show as-is
+  history: 'linear' | 'behind' | 'diverged'
+  saved_head: string
+  current_head: string | null
+  saved_branch: string
+  current_branch: string | null
+  commits_ahead: number
+  commits_behind: number
+  commits: SinceCommit[] // newest first, bounded
+  commits_truncated: boolean
+  files_changed: number
+  files: ChangedFile[] // bounded
+  files_truncated: boolean
+  uncommitted_files: number
+  uncommitted_paths: string[] // bounded
+}
