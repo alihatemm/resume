@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from . import ai, config, db
 from .git_context import GitError, allowed_files, capture, resolve_repo, sanitize
+from .locations import add_file_locations
 from .schemas import Checkpoint, CheckpointCreate, CheckpointListItem, GitContext
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
@@ -76,6 +77,8 @@ def create_checkpoint(body: CheckpointCreate):
 
     allowed = allowed_files(root, git, [note, terminal_text, transcript])
     summary, status = ai.summarize(git, note, terminal_text, transcript, links, allowed)
+    # abs_path/line are computed server-side only, and stored so restore never needs git or AI.
+    summary.files = add_file_locations(root, git, summary.files, allowed, terminal_text)
     checkpoint_id = db.insert(
         repo_path=str(root),
         status=status,

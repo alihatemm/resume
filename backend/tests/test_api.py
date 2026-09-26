@@ -34,7 +34,12 @@ def test_full_checkpoint_lifecycle(client, repo):
     assert s["problem"] == payload["transcript"]
     assert s["errors"][-1] == "KeyError: 'authorization'"
     assert [link["url"] for link in s["links"]] == ["https://fastapi.tiangolo.com/tutorial/middleware/"]
-    assert s["files"][0]["line"] is None and s["files"][0]["abs_path"] is None
+    # Placeholder summary files still get server-side locations.
+    assert s["files"][0] == {
+        "path": "main.py", "reason": "Modified", "line": 2, "abs_path": str((repo / "main.py").resolve()),
+    }
+    assert s["files"][1]["path"] == "middleware.py" and s["files"][1]["line"] is None  # untracked: no line
+    assert s["files"][1]["abs_path"] == str((repo / "middleware.py").resolve())
 
     # secrets never returned...
     assert FAKE_GOOGLE_KEY not in res.text
