@@ -1,6 +1,7 @@
+import { vscodeFileUri } from '../format'
 import type { FileRef } from '../types'
 
-// "Open" is visual-only in M1; opening in VS Code arrives with real restoration.
+// "Open" jumps to the file (and line) in VS Code using the backend-verified abs_path/line.
 // line and abs_path may be null: no ":line" suffix, and no Open action without an absolute path.
 export function FileRow({ file }: { file: FileRef }) {
   return (
@@ -14,13 +15,13 @@ export function FileRow({ file }: { file: FileRef }) {
         {file.reason && <p className="mt-0.5 text-sm text-zinc-400">{file.reason}</p>}
       </div>
       {file.abs_path !== null && (
-        <button
-          type="button"
-          title="Open in VS Code (coming soon)"
+        <a
+          href={vscodeFileUri(file.abs_path, file.line)}
+          title={`Open in VS Code: ${file.path}${file.line !== null ? `:${file.line}` : ''}`}
           className="shrink-0 rounded-md border border-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors group-hover:border-zinc-700 hover:bg-zinc-800 hover:text-white"
         >
           Open ↗
-        </button>
+        </a>
       )}
     </li>
   )

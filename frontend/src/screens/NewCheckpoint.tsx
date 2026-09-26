@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { api } from '../api'
 import { checkpoints } from '../checkpoints'
 import { Button, Kbd, LinkButton } from '../components/Button'
 import { href, navigate, paths } from '../router'
+import type { GitContext } from '../types'
 
 const LAST_REPO_KEY = 'resume:last-repo-path'
 
@@ -30,6 +32,12 @@ function parseLinks(text: string): { links: string[]; invalid: string[] } {
   return { links: lines.filter(isUrl), invalid: lines.filter((s) => !isUrl(s)) }
 }
 
+type RepoCheck =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'ok'; git: GitContext }
+  | { state: 'error'; message: string }
+
 const inputClass =
   'w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3.5 py-2.5 text-[15px] text-zinc-100 placeholder:text-zinc-600 ' +
   'transition-colors focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/15'
@@ -42,6 +50,9 @@ export function NewCheckpoint() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hadRepo] = useState(() => repoPath !== '')
+  const [repoCheck, setRepoCheck] = useState<RepoCheck>({ state: 'idle' })
+  const checkSeq = useRef(0)
+  const checkedPath = useRef('')
   // A ref, not state, so a fast double ⌘↵ can't slip in before the re-render.
   const inFlight = useRef(false)
   const mounted = useRef(true)
@@ -50,6 +61,39 @@ export function NewCheckpoint() {
     return () => {
       mounted.current = false
     }
+  }, [])
+
+  // Preview the repo (validates it's a git repo) when the field loses focus. Advisory only:
+  // POST /api/checkpoints validates again, so a failed or pending check never blocks saving.
+  async function inspectRepo(path: string) {
+    const repo = path.trim()
+    if (!repo || repo === checkedPath.current) return
+    checkedPath.current = repo
+    const seq = ++checkSeq.current
+    setRepoCheck({ state: 'checking' })
+    try {
+      const git = await api.inspectRepo(repo)
+      if (mounted.current && seq === checkSeq.current) setRepoCheck({ state: 'ok', git })
+    } catch (err) {
+      if (mounted.current && seq === checkSeq.current) {
+        checkedPath.current = '' // failures (e.g. backend not up yet) are re-checked on the next blur
+        setRepoCheck({ state: 'error', message: err instanceof Error ? err.message : 'Could not check this repository.' })
+      }
+    }
+  }
+
+  function onRepoChange(value: string) {
+    setRepoPath(value)
+    checkSeq.current++ // drop any in-flight result for the old path
+    checkedPath.current = ''
+    setRepoCheck({ state: 'idle' })
+  }
+
+  // A remembered repo gets checked right away.
+  useEffect(() => {
+    if (hadRepo) inspectRepo(repoPath)
+    // Runs once on mount with the initial path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function submit(e: FormEvent) {
@@ -101,11 +145,14 @@ export function NewCheckpoint() {
               className={`${inputClass} font-mono text-sm`}
               placeholder="/Users/you/code/my-project"
               value={repoPath}
-              onChange={(e) => setRepoPath(e.target.value)}
+              onChange={(e) => onRepoChange(e.target.value)}
+              onBlur={() => inspectRepo(repoPath)}
               autoFocus={!hadRepo}
               spellCheck={false}
               autoComplete="off"
+              aria-describedby="repo-status"
             />
+            <RepoStatus check={repoCheck} />
           </Field>
 
           <Field label="Where are you?" htmlFor="note" hint="What you were doing, what's broken, what you'd try next.">
@@ -176,6 +223,25 @@ export function NewCheckpoint() {
       </form>
     </div>
   )
+}
+
+function RepoStatus({ check }: { check: RepoCheck }) {
+  const base = 'mt-1.5 min-h-4 font-mono text-xs'
+  if (check.state === 'checking') {
+    return <p id="repo-status" className={`${base} text-zinc-500`}>Checking repository…</p>
+  }
+  if (check.state === 'error') {
+    return <p id="repo-status" className={`${base} text-red-300`}>{check.message}</p>
+  }
+  if (check.state === 'ok') {
+    const n = check.git.changed_files.length
+    return (
+      <p id="repo-status" className={`${base} text-emerald-400/80`}>
+        ✓ {check.git.repo_name} · {check.git.branch} · {n === 0 ? 'no uncommitted changes' : `${n} changed file${n === 1 ? '' : 's'}`}
+      </p>
+    )
+  }
+  return <p id="repo-status" className={base} />
 }
 
 function Field({

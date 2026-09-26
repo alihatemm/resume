@@ -32,3 +32,11 @@ export function linkLabel(url: string): string {
     return url
   }
 }
+
+// vscode://file/<absolute path>[:line]. abs_path and line are verified by the backend; this only encodes.
+// Each segment is percent-encoded so spaces, '#', '?' and '%' in names can't break the URI;
+// VS Code decodes the path before reading the trailing :line.
+export function vscodeFileUri(absPath: string, line: number | null): string {
+  const encoded = absPath.split('/').map(encodeURIComponent).join('/')
+  return `vscode://file${encoded}${line !== null ? `:${line}` : ''}`
+}
