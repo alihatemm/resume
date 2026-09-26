@@ -4,6 +4,7 @@ import { FileRow } from '../components/FileRow'
 import { NextStepCard } from '../components/NextStepCard'
 import { Section } from '../components/Section'
 import { ErrorState, LoadingState } from '../components/States'
+import { SinceYouLeft } from '../components/SinceYouLeft'
 import { StatusBadge } from '../components/StatusBadge'
 import { fullDateTime, linkLabel, relativeTime, shortSha } from '../format'
 import { href, paths } from '../router'
@@ -73,14 +74,18 @@ function Restore({ checkpoint: c }: { checkpoint: Checkpoint }) {
       </header>
 
       <div className="mt-8 space-y-10">
-        {c.summary ? (
-          <div className="space-y-3">
-            {aiFailed && <FallbackWarning />}
-            <NextStepCard step={c.summary.next_step} detail={c.summary.next_step_detail} />
-          </div>
-        ) : (
-          <NoSummaryNotice />
-        )}
+        <div className="space-y-3">
+          {c.summary ? (
+            <>
+              {aiFailed && <FallbackWarning />}
+              <NextStepCard step={c.summary.next_step} detail={c.summary.next_step_detail} />
+            </>
+          ) : (
+            <NoSummaryNotice />
+          )}
+          {/* Loads separately; never blocks the saved checkpoint above. */}
+          <SinceYouLeft id={c.id} />
+        </div>
 
         {c.summary && <SummaryView summary={c.summary} />}
 

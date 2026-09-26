@@ -9,7 +9,8 @@ from fastapi.responses import JSONResponse
 from . import ai, config, db
 from .git_context import GitError, allowed_files, capture, resolve_repo, sanitize
 from .locations import add_file_locations
-from .schemas import Checkpoint, CheckpointCreate, CheckpointListItem, GitContext
+from .schemas import Checkpoint, CheckpointCreate, CheckpointListItem, GitContext, SinceYouLeft
+from .since import since_checkpoint
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
 
@@ -102,6 +103,15 @@ def get_checkpoint(checkpoint_id: int):
     if checkpoint is None:
         raise HTTPException(status_code=404, detail=f"Checkpoint {checkpoint_id} not found.")
     return checkpoint
+
+
+@app.get("/api/checkpoints/{checkpoint_id}/since", response_model=SinceYouLeft)
+def checkpoint_since(checkpoint_id: int):
+    # Read-only and deterministic (git, no AI). Kept separate so GET /api/checkpoints/{id} stays instant.
+    checkpoint = db.get(checkpoint_id)
+    if checkpoint is None:
+        raise HTTPException(status_code=404, detail=f"Checkpoint {checkpoint_id} not found.")
+    return since_checkpoint(checkpoint)
 
 
 @app.delete("/api/checkpoints/{checkpoint_id}", status_code=204)

@@ -1,4 +1,4 @@
-import type { Checkpoint, CheckpointCreate, CheckpointListItem, GitContext, Health } from './types'
+import type { Checkpoint, CheckpointCreate, CheckpointListItem, GitContext, Health, SinceYouLeft } from './types'
 
 // All calls go through the relative /api path (proxied to FastAPI by Vite in dev).
 
@@ -47,6 +47,9 @@ export const api = {
   listCheckpoints: () => request<CheckpointListItem[]>('/api/checkpoints'),
 
   getCheckpoint: (id: number) => request<Checkpoint>(`/api/checkpoints/${id}`),
+
+  // Git comparison against the repo's current state; loaded separately so it never blocks Restore.
+  sinceCheckpoint: (id: number) => request<SinceYouLeft>(`/api/checkpoints/${id}/since`),
 
   createCheckpoint: (body: CheckpointCreate) =>
     request<Checkpoint>(
