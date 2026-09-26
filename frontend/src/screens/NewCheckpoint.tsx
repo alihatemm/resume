@@ -39,7 +39,7 @@ type RepoCheck =
   | { state: 'error'; message: string }
 
 const inputClass =
-  'w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3.5 py-2.5 text-[15px] text-zinc-100 placeholder:text-zinc-600 ' +
+  'w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3.5 py-2.5 text-[15px] text-zinc-100 placeholder:text-zinc-500 ' +
   'transition-colors focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/15'
 
 export function NewCheckpoint() {
@@ -51,6 +51,7 @@ export function NewCheckpoint() {
   const [error, setError] = useState<string | null>(null)
   const [hadRepo] = useState(() => repoPath !== '')
   const [repoCheck, setRepoCheck] = useState<RepoCheck>({ state: 'idle' })
+  const elapsed = useElapsedSeconds(saving)
   const checkSeq = useRef(0)
   const checkedPath = useRef('')
   // A ref, not state, so a fast double ⌘↵ can't slip in before the re-render.
@@ -133,8 +134,9 @@ export function NewCheckpoint() {
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">New checkpoint</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Your git state is captured automatically. Add a quick note so future you knows where to start.
+      <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-zinc-400">
+        Your branch, changed files, and diff are captured automatically. Add a sentence about where you are, and AI
+        turns it all into a recovery plan with the exact next step.
       </p>
 
       <form onSubmit={submit} onKeyDown={onKeyDown} className="mt-8 space-y-6" noValidate aria-busy={saving}>
@@ -155,7 +157,12 @@ export function NewCheckpoint() {
             <RepoStatus check={repoCheck} />
           </Field>
 
-          <Field label="Where are you?" htmlFor="note" hint="What you were doing, what's broken, what you'd try next.">
+          <Field
+            label="Where are you?"
+            htmlFor="note"
+            recommended
+            hint="One or two sentences: what you were doing, what's broken, what you'd try next."
+          >
             <textarea
               id="note"
               rows={4}
@@ -203,10 +210,14 @@ export function NewCheckpoint() {
             {saving ? (
               <>
                 <Spinner /> Creating checkpoint…
+                {elapsed > 0 && <span className="font-mono tabular-nums opacity-80">{elapsed}s</span>}
               </>
             ) : (
               <>
-                Save checkpoint <Kbd>⌘↵</Kbd>
+                Save checkpoint
+                <span className="hidden sm:inline-flex">
+                  <Kbd>⌘↵</Kbd>
+                </span>
               </>
             )}
           </Button>
@@ -217,8 +228,9 @@ export function NewCheckpoint() {
           )}
         </div>
 
-        <p role="status" aria-live="polite" className="min-h-5 text-sm text-zinc-500">
-          {saving && 'Capturing your work context and generating a recovery summary. This can take a few seconds.'}
+        {/* Not aria-live on the timer itself, so screen readers aren't told every second. */}
+        <p role="status" aria-live="polite" className="min-h-5 text-sm leading-relaxed text-pretty text-zinc-400">
+          {saving && 'Capturing your git context and generating a recovery summary. This can take several seconds.'}
         </p>
       </form>
     </div>
@@ -249,22 +261,29 @@ function Field({
   htmlFor,
   hint,
   optional,
+  recommended,
   children,
 }: {
   label: string
   htmlFor: string
   hint?: string
   optional?: boolean
+  recommended?: boolean
   children: ReactNode
 }) {
   return (
     <div>
-      <label htmlFor={htmlFor} className="mb-1.5 flex items-baseline gap-2 text-sm font-medium text-zinc-200">
+      <label htmlFor={htmlFor} className="mb-1.5 flex items-center gap-2 text-sm font-medium text-zinc-100">
         {label}
-        {optional && <span className="text-xs font-normal text-zinc-600">optional</span>}
+        {optional && <span className="text-xs font-normal text-zinc-500">optional</span>}
+        {recommended && (
+          <span className="rounded bg-emerald-400/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-emerald-300">
+            recommended
+          </span>
+        )}
       </label>
       {children}
-      {hint && <p className="mt-1.5 text-xs text-zinc-500">{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{hint}</p>}
     </div>
   )
 }
@@ -276,4 +295,20 @@ function Spinner() {
       <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
+}
+
+// Display-only: counts seconds while a create is in flight. It has no effect on the request,
+// its timeout, or retries, and it is elapsed time, not progress.
+function useElapsedSeconds(active: boolean): number {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    if (!active) return
+    const start = Date.now()
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - start) / 1000)), 1000)
+    return () => {
+      clearInterval(timer)
+      setSeconds(0) // ready for the next save
+    }
+  }, [active])
+  return seconds
 }

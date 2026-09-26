@@ -9,12 +9,15 @@ export function LoadingState({ variant }: { variant: 'list' | 'detail' }) {
   return (
     <div className="animate-pulse" role="status" aria-label="Loading">
       {variant === 'list' ? (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="rounded-lg border border-zinc-800/80 px-4 py-3.5">
-              <Bar className="h-3 w-40" />
+            <div key={i} className="rounded-lg border border-zinc-800 px-4 py-4 sm:px-5">
+              <Bar className="h-3 w-40 max-w-full" />
               <Bar className="mt-3 h-4 w-2/3" />
-              <Bar className="mt-2.5 h-3 w-5/6" />
+              <div className="mt-3 flex gap-2.5">
+                <Bar className="h-4 w-10 shrink-0" />
+                <Bar className="h-4 w-5/6" />
+              </div>
             </div>
           ))}
         </div>
@@ -38,9 +41,9 @@ export function LoadingState({ variant }: { variant: 'list' | 'detail' }) {
 
 export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-zinc-800 px-6 py-14 text-center">
-      <p className="font-medium text-zinc-200">{title}</p>
-      <p className="mx-auto mt-1.5 max-w-sm text-sm text-zinc-500">{body}</p>
+    <div className="rounded-xl border border-dashed border-zinc-700 px-5 py-12 text-center sm:px-8 sm:py-14">
+      <p className="text-base font-medium text-zinc-100">{title}</p>
+      <p className="mx-auto mt-2 max-w-md text-[15px] leading-relaxed text-pretty text-zinc-400">{body}</p>
       {action && <div className="mt-6">{action}</div>}
     </div>
   )
@@ -58,11 +61,11 @@ export function ErrorState({
   action?: ReactNode
 }) {
   return (
-    <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/5 px-6 py-10 text-center">
-      <p className="font-medium text-red-300">{title}</p>
-      <p className="mx-auto mt-1.5 max-w-sm font-mono text-sm text-zinc-400">{message}</p>
+    <div role="alert" className="rounded-xl border border-red-500/25 bg-red-500/5 px-5 py-10 text-center sm:px-8">
+      <p className="text-base font-medium text-red-300">{title}</p>
+      <p className="mx-auto mt-2 max-w-md font-mono text-sm leading-relaxed break-words text-zinc-300">{message}</p>
       {(onRetry || action) && (
-        <div className="mt-6 flex justify-center gap-2">
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
           {onRetry && (
             <Button variant="ghost" onClick={onRetry}>
               Try again
