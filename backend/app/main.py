@@ -5,12 +5,14 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from . import ai, config, db
 from .git_context import GitError, allowed_files, capture, resolve_repo, sanitize
 from .locations import add_file_locations
 from .schemas import Checkpoint, CheckpointCreate, CheckpointListItem, GitContext, SinceYouLeft
 from .since import since_checkpoint
+from .transcribe import MAX_AUDIO_BYTES, TOO_LARGE, TranscriptionError, transcribe_audio
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
 
@@ -90,6 +92,30 @@ def create_checkpoint(body: CheckpointCreate):
         summary=summary,
     )
     return db.get(checkpoint_id)
+
+
+@app.post("/api/transcribe")
+async def transcribe(request: Request):
+    """Raw audio body (Content-Type: the recording's type) -> {"transcript": "..."}.
+
+    Audio is read into memory with a hard size cap and never stored. Never creates a checkpoint.
+    """
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail=TOO_LARGE)
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_AUDIO_BYTES:
+            raise HTTPException(status_code=413, detail=TOO_LARGE)
+        chunks.append(chunk)
+
+    try:
+        text = await run_in_threadpool(transcribe_audio, b"".join(chunks), request.headers.get("content-type", ""))
+    except TranscriptionError as e:
+        raise HTTPException(status_code=e.status, detail=e.detail)
+    return {"transcript": text}
 
 
 @app.get("/api/checkpoints", response_model=list[CheckpointListItem])
