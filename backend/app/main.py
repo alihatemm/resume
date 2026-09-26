@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -6,8 +7,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from . import ai, config, db
-from .git_context import GitError, capture, resolve_repo, sanitize
+from .git_context import GitError, allowed_files, capture, resolve_repo, sanitize
 from .schemas import Checkpoint, CheckpointCreate, CheckpointListItem, GitContext
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
 
 MAX_NOTE_CHARS = 5_000
 MAX_TRANSCRIPT_CHARS = 5_000
@@ -71,10 +74,11 @@ def create_checkpoint(body: CheckpointCreate):
         if url.strip().lower().startswith(("http://", "https://"))
     ][:MAX_LINKS]
 
-    summary = ai.summarize(git, note, terminal_text, transcript, links)
+    allowed = allowed_files(root, git, [note, terminal_text, transcript])
+    summary, status = ai.summarize(git, note, terminal_text, transcript, links, allowed)
     checkpoint_id = db.insert(
         repo_path=str(root),
-        status="ready",
+        status=status,
         note=note,
         terminal_text=terminal_text,
         transcript=transcript,

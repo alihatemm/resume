@@ -24,7 +24,7 @@ def test_full_checkpoint_lifecycle(client, repo):
     res = client.post("/api/checkpoints", json=payload)
     assert res.status_code == 201, res.text
     cp = res.json()
-    assert cp["status"] == "ready"
+    assert cp["status"] == "ai_failed"  # AI disabled in tests -> placeholder summary
     assert cp["repo_path"] == str(repo.resolve())
     assert cp["git"]["branch"] == "main"
     assert {f["path"] for f in cp["git"]["changed_files"]} == {"main.py", "middleware.py"}

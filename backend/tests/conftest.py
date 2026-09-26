@@ -24,6 +24,12 @@ def commit_all(repo: Path, message: str) -> None:
     git(repo, "commit", "-q", "--no-verify", "-m", message)
 
 
+@pytest.fixture(autouse=True)
+def no_real_gemini(monkeypatch):
+    """Tests never call the real Gemini API. test_ai.py fakes it explicitly."""
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "")
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A small git repo with one commit and a clean tree."""

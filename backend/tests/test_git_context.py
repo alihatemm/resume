@@ -1,7 +1,7 @@
 import pytest
 
 from app import git_context
-from app.git_context import GitError, capture, resolve_repo, sanitize
+from app.git_context import GitError, allowed_files, capture, resolve_repo, sanitize
 
 from .conftest import FAKE_GOOGLE_KEY, commit_all, git
 
@@ -154,3 +154,22 @@ def test_repo_with_no_commits(tmp_path):
 def test_detached_head(repo):
     git(repo, "checkout", "-q", "--detach")
     assert capture(repo).branch == "HEAD (detached)"
+
+
+def test_allowed_files_only_verified_tracked_mentions(repo):
+    (repo / "src").mkdir()
+    (repo / "src" / "helpers.py").write_text("x = 1\n")
+    (repo / "lib").mkdir()
+    (repo / "lib" / "helpers.py").write_text("x = 2\n")  # bare "helpers.py" is now ambiguous
+    (repo / "src" / "routes.py").write_text("y = 1\n")
+    (repo / ".env").write_text("A=1\n")
+    commit_all(repo, "add src")
+    (repo / "scratch.py").write_text("z = 1\n")  # untracked, so it's a changed file
+
+    text = (
+        'File "/Users/me/demo-api/src/routes.py", line 3\n'  # absolute path -> src/routes.py
+        "see main.py, helpers.py, domain.py, ghost.py and .env\n"  # exact / ambiguous / no / missing / excluded
+    )
+    allowed = dict(allowed_files(repo, capture(repo), [text]))
+
+    assert allowed == {"scratch.py": "??", "main.py": "mentioned", "src/routes.py": "mentioned"}

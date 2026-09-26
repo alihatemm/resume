@@ -256,3 +256,48 @@ def _untracked_section(root: Path, rel_path: str) -> str | None:
         return None
     body = "".join(f"+{line}\n" for line in data.decode("utf-8", errors="replace").splitlines())
     return f"diff --git a/{rel_path} b/{rel_path}\nnew file (untracked)\n--- /dev/null\n+++ b/{rel_path}\n{body}"
+
+
+# ---------- Files the AI is allowed to reference ----------
+
+MAX_ALLOWED_CHANGED = 100
+MAX_MENTIONED_FILES = 10
+_PATH_TOKEN = re.compile(r"[\w./\\-]*\w\.[A-Za-z0-9]+")
+
+
+def allowed_files(root: Path, git: GitContext, texts: list[str]) -> list[tuple[str, str]]:
+    """Returns (path, label) pairs the AI may reference.
+
+    Changed files (minus excluded ones), plus git-tracked files that exist on
+    disk and are explicitly mentioned in the developer's sanitized text.
+    """
+    allowed = [(f.path, f.status) for f in git.changed_files if not is_excluded(f.path)][:MAX_ALLOWED_CHANGED]
+    seen = {path for path, _ in allowed}
+    for path in _mentioned_tracked_files(root, texts):
+        if path not in seen:
+            allowed.append((path, "mentioned"))
+            seen.add(path)
+    return allowed
+
+
+def _mentioned_tracked_files(root: Path, texts: list[str]) -> list[str]:
+    tokens = {t for text in texts for t in _PATH_TOKEN.findall(text)}
+    if not tokens:
+        return []
+    tracked = {p for p in _git(root, "ls-files", "-z").stdout.split("\0") if p}
+    by_name: dict[str, list[str]] = {}
+    for p in tracked:
+        by_name.setdefault(PurePosixPath(p).name, []).append(p)
+
+    found: list[str] = []
+    for token in sorted(tokens):
+        parts = [p for p in token.replace("\\", "/").split("/") if p not in ("", ".")]
+        # Longest suffix that is a tracked path, e.g. /Users/me/demo-api/app/main.py -> app/main.py
+        match = next((s for s in ("/".join(parts[i:]) for i in range(len(parts))) if s in tracked), None)
+        if match is None and len(parts) == 1 and len(by_name.get(parts[0], [])) == 1:
+            match = by_name[parts[0]][0]  # bare file name that is unique in the repo
+        if match and match not in found and not is_excluded(match) and (root / match).is_file():
+            found.append(match)
+        if len(found) >= MAX_MENTIONED_FILES:
+            break
+    return found
