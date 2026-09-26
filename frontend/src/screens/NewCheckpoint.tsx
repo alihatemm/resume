@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type R
 import { api } from '../api'
 import { checkpoints } from '../checkpoints'
 import { Button, Kbd, LinkButton } from '../components/Button'
+import { VoiceThought } from '../components/VoiceThought'
 import { href, navigate, paths } from '../router'
 import type { GitContext } from '../types'
 
@@ -47,6 +48,9 @@ export function NewCheckpoint() {
   const [note, setNote] = useState('')
   const [terminal, setTerminal] = useState('')
   const [linksText, setLinksText] = useState('')
+  // Separate from the typed note; sent as CheckpointCreate.transcript.
+  const [transcript, setTranscript] = useState('')
+  const [voiceBusy, setVoiceBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hadRepo] = useState(() => repoPath !== '')
@@ -100,6 +104,8 @@ export function NewCheckpoint() {
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (inFlight.current) return
+    // Covers ⌘↵ too: never save while a voice note is being recorded or transcribed.
+    if (voiceBusy) return
 
     const repo = repoPath.trim()
     if (!repo) return setError('Enter the path to your repository.')
@@ -111,7 +117,13 @@ export function NewCheckpoint() {
     inFlight.current = true
     try {
       // Can take several seconds: the backend generates the AI summary during create.
-      const created = await checkpoints.create({ repo_path: repo, note, terminal_text: terminal, links })
+      const created = await checkpoints.create({
+        repo_path: repo,
+        note,
+        terminal_text: terminal,
+        transcript: transcript.trim(),
+        links,
+      })
       saveLastRepo(repo)
       // If the user left mid-create, the checkpoint still lands on the dashboard; don't yank them back.
       if (mounted.current) navigate(paths.detail(created.id))
@@ -162,6 +174,14 @@ export function NewCheckpoint() {
             htmlFor="note"
             recommended
             hint="One or two sentences: what you were doing, what's broken, what you'd try next."
+            footer={
+              <VoiceThought
+                transcript={transcript}
+                onTranscriptChange={setTranscript}
+                onBusyChange={setVoiceBusy}
+                disabled={saving}
+              />
+            }
           >
             <textarea
               id="note"
@@ -206,7 +226,7 @@ export function NewCheckpoint() {
         )}
 
         <div className="flex items-center gap-2 pt-2">
-          <Button type="submit" disabled={saving} className={saving ? 'disabled:opacity-80' : ''}>
+          <Button type="submit" disabled={saving || voiceBusy} className={saving ? 'disabled:opacity-80' : ''}>
             {saving ? (
               <>
                 <Spinner /> Creating checkpoint…
@@ -226,6 +246,7 @@ export function NewCheckpoint() {
               Cancel
             </LinkButton>
           )}
+          {voiceBusy && !saving && <span className="text-xs text-zinc-500">Finish your voice note first</span>}
         </div>
 
         {/* Not aria-live on the timer itself, so screen readers aren't told every second. */}
@@ -262,6 +283,7 @@ function Field({
   hint,
   optional,
   recommended,
+  footer,
   children,
 }: {
   label: string
@@ -269,6 +291,7 @@ function Field({
   hint?: string
   optional?: boolean
   recommended?: boolean
+  footer?: ReactNode
   children: ReactNode
 }) {
   return (
@@ -284,6 +307,7 @@ function Field({
       </label>
       {children}
       {hint && <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{hint}</p>}
+      {footer}
     </div>
   )
 }

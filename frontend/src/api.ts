@@ -6,6 +6,8 @@ import type { Checkpoint, CheckpointCreate, CheckpointListItem, GitContext, Heal
 // backend caps at ~15s, so its timeout leaves generous headroom.
 const READ_TIMEOUT_MS = 10_000
 const CREATE_TIMEOUT_MS = 60_000
+// Transcription: upload plus the backend's ~15s Gemini budget, with headroom.
+const TRANSCRIBE_TIMEOUT_MS = 30_000
 
 const UNREACHABLE = 'Could not reach the Resume backend. Is the API server running?'
 
@@ -50,6 +52,14 @@ export const api = {
 
   // Git comparison against the repo's current state; loaded separately so it never blocks Restore.
   sinceCheckpoint: (id: number) => request<SinceYouLeft>(`/api/checkpoints/${id}/since`),
+
+  // Raw recording as the request body (no base64, no multipart); Content-Type is the Blob's own type.
+  transcribe: (audio: Blob) =>
+    request<{ transcript: string }>(
+      '/api/transcribe',
+      { method: 'POST', headers: { 'Content-Type': audio.type }, body: audio },
+      TRANSCRIBE_TIMEOUT_MS,
+    ),
 
   createCheckpoint: (body: CheckpointCreate) =>
     request<Checkpoint>(
