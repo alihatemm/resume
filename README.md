@@ -10,6 +10,24 @@ VS Code on the right line.
 Built for ShellHacks 2026 for Microsoft's **"What's Missing?"** challenge. It runs locally on purpose,
 because it needs your git repositories and your editor.
 
+## Demo
+
+[Watch the ShellHacks Demo](demo/shellhacks-demo.mov)
+
+## Screenshots
+
+### Create a New Checkpoint
+![Create a New Checkpoint](screenshots/new-checkpoint.png)
+
+### AI-Generated Recovery Plan
+![Checkpoint Recovery Plan](screenshots/checkpoint-recovery-plan.png)
+
+### Since You Left
+![Since You Left](screenshots/since-you-left.png)
+
+### Resume Work in VS Code
+![Resume Work in VS Code](screenshots/resume-work-code.png)
+
 ---
 
 ## The problem
